@@ -1,0 +1,73 @@
+---
+title: "Prediction Assignment Writeup"
+author: "Abu Raihan"
+date: "31/03/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Overview
+
+The goal of the project is to predict the manner in which the participants did the exercise. This can be found in the "classe" variable of the training set. We will build our model using the random forest method with bootstrap resampling as default and then we will compare the accuracy with that of the cross validation method. The resampling method with higher accuracy will be used against the test set.
+
+First let's load the applicable r packages, the training and test sets and perform some data preprocessing (remove NA) as well as do some exploratory analysis.
+```{r, results=FALSE}
+library(caret)
+library(tidyverse)
+
+training <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", na.strings = c("NA", "#DIV/0!",""))
+testing <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", na.strings = c("NA", "#DIV/0!",""))
+
+complete <- complete.cases(t(training)) & complete.cases(t(testing))
+training <- training[,complete]
+testing <- testing[,complete]
+
+training <- training[,-c(1:7)]
+testing <- testing[,-c(1:7)]
+
+dim(training)
+dim(testing)
+```
+Initially, we had 160 variables, however, after doing some preprocessing, we have reduced the number of variables to 53. We have also removed the first 7 variables which we have deemed not useful.
+
+We will partition the training data using 70/30 split.
+```{r}
+set.seed(100)
+inTrain <- createDataPartition(training$classe, p=0.7, list=FALSE)
+train <- training[inTrain,]
+validate <- training[-inTrain,]
+```
+
+Now, we will build our model using the random forest method, perform prediction and test the accuracy.
+```{r}
+set.seed(123)
+model_rf <- train(classe~., data = train, method = "rf")
+pred_rf <- predict(model_rf, validate)
+accuracy_rf <- confusionMatrix(pred_rf,validate$classe)$overall['Accuracy']
+```
+The accuracy when we perform prediction on the validation test set is quite high at `r accuracy_rf`.
+
+Now, let's build another model based on random forest with 10-fold cross validation, perform prediction and test the accuracy.
+```{r}
+set.seed(123)
+modelfit_control <- trainControl(method = "cv", number = 10, allowParallel = TRUE)
+model_cv <- train(classe~., data = train, method = "rf", trControl = modelfit_control)
+pred_cv <- predict(model_cv, validate)
+accuracy_cv <- confusionMatrix(pred_cv,validate$classe)$overall['Accuracy']
+```
+The accuracy on random forest with 10-fold cross validation is marginally lower at `r accuracy_cv`.
+
+Hence, we will use the random forest with bootstrapping on the testing set.
+```{r}
+pred_testresult <- predict(model_rf, newdata = testing)
+testing$classe <- pred_testresult
+print(testing$classe)
+```
+By applying our model above to the testing set, we have successfully managed to predict all of the 20 quiz questions correctly.
